@@ -127,6 +127,7 @@ export default function Home() {
   const theme = "light";
   const [slideshowIndex, setSlideshowIndex] = useState(0);
   const [activeAnatomyStep, setActiveAnatomyStep] = useState(0);
+  const [demoStep, setDemoStep] = useState<"draft" | "critique" | "verdict">("draft");
   const [quoteIndex, setQuoteIndex] = useState(0);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -175,7 +176,8 @@ export default function Home() {
     setActiveTab("report");
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/research", {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${backendUrl}/api/research`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -304,14 +306,14 @@ export default function Home() {
                 </div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-gold/15 text-gold-dark text-[10px] font-bold uppercase tracking-widest rounded-none border border-gold/30">
                   <Cpu className="w-3.5 h-3.5" />
-                  Self-Skeptical Investigation Agent
+                  Doubt-Driven Research Assistant
                 </div>
-                <h1 className="text-6xl sm:text-7xl font-normal leading-[1.03] tracking-normal text-center" style={{ fontFamily: "var(--font-signature)" }}>
-                  Research that challenges <br />
-                  its own assumptions.
+                <h1 className="text-5xl sm:text-6xl font-normal leading-[1.1] tracking-normal text-center animate-fade-in" style={{ fontFamily: "var(--font-signature)" }}>
+                  The search engine that <br />
+                  doubts itself.
                 </h1>
-                <p className="text-sm text-foreground/90 font-normal max-w-xl leading-relaxed mt-2 mx-auto">
-                  Renaissance is a cognitive investigation suite that scrapes the live web, compiles raw evidence under strict token budgets, drafts findings, and then subjects them to a rigorous red-team critique to isolate logical gaps before refining its conclusions.
+                <p className="text-sm text-foreground/90 font-normal max-w-xl leading-relaxed mt-2 mx-auto font-light">
+                  Most AI search engines suffer from confirmation bias—they only find evidence that supports your query. Renaissance is different: it researches your topic, writes a draft, conducts an adversarial critique on its own work, and hunts for the contrarian facts other AIs miss.
                 </p>
               </div>
 
@@ -361,6 +363,183 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Stepper & Comparison Grid */}
+              <div className="w-full max-w-4xl mt-12 flex flex-col gap-10 text-left">
+                
+                {/* Stepper (The Magic Trick) */}
+                <div className="flex flex-col gap-5 border border-border-custom bg-card/25 p-6 shadow-sm">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-gold">Case Study in Action</div>
+                    <h2 className="font-serif text-xl font-normal text-foreground">The Self-Skeptical Method</h2>
+                    <p className="text-xs text-muted-custom leading-relaxed">
+                      Watch how Renaissance cross-examines its own research. Select a step below to see how it resolves confirmation bias on the question: 
+                      <span className="italic font-medium text-foreground/90"> "Is dark chocolate actually beneficial for cardiovascular health?"</span>
+                    </p>
+                  </div>
+
+                  {/* Steps Navigation */}
+                  <div className="grid grid-cols-3 gap-2 border border-border-custom bg-card/50 p-1 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDemoStep("draft")}
+                      className={`py-3 px-2 text-center flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 ${
+                        demoStep === "draft" 
+                          ? "bg-foreground text-background font-bold shadow-sm" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/5"
+                      }`}
+                    >
+                      <span className="text-[9px] uppercase tracking-widest font-mono font-semibold opacity-75">Step 01</span>
+                      <span className="text-xs font-serif font-normal">Initial Draft</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDemoStep("critique")}
+                      className={`py-3 px-2 text-center flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 ${
+                        demoStep === "critique" 
+                          ? "bg-terracotta text-white font-bold shadow-sm" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/5"
+                      }`}
+                    >
+                      <span className="text-[9px] uppercase tracking-widest font-mono font-semibold opacity-75">Step 02</span>
+                      <span className="text-xs font-serif font-normal text-terracotta">Critic Audit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDemoStep("verdict")}
+                      className={`py-3 px-2 text-center flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 ${
+                        demoStep === "verdict" 
+                          ? "bg-gold text-background font-bold shadow-sm" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/5"
+                      }`}
+                    >
+                      <span className="text-[9px] uppercase tracking-widest font-mono font-semibold opacity-75">Step 03</span>
+                      <span className="text-xs font-serif font-normal text-gold-dark">Refined Verdict</span>
+                    </button>
+                  </div>
+
+                  {/* Step Content Card */}
+                  <div className="bg-card border border-border-custom p-6 min-h-[220px] transition-all duration-300 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                    
+                    {demoStep === "draft" && (
+                      <div className="animate-fade-in flex flex-col gap-4">
+                        <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+                          <div className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 border border-blue-200">
+                            Standard AI Output (Confirmatory Bias)
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-custom">Hypothesis: Positive</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <h4 className="font-serif text-lg text-foreground font-normal">"Yes, dark chocolate improves heart health by lowering blood pressure due to flavanols."</h4>
+                          <p className="text-xs text-foreground/80 leading-relaxed font-light">
+                            Dark chocolate is rich in flavanols (especially epicatechin), which stimulate nitric oxide production in blood vessels, causing vasodilation and reduced blood pressure. Dozens of published randomized trials confirm flavanols reduce cardiovascular risk.
+                          </p>
+                        </div>
+                        <div className="text-[10px] text-amber-700 bg-amber-50 p-2 border border-amber-200/50 mt-2 font-mono">
+                          ⚠️ Flaw: Immediately accepts positive findings; ignores study duration, funding source, and caloric offset.
+                        </div>
+                      </div>
+                    )}
+
+                    {demoStep === "critique" && (
+                      <div className="animate-fade-in flex flex-col gap-4">
+                        <div className="flex items-center justify-between border-b border-terracotta/20 pb-3">
+                          <div className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-terracotta bg-terracotta/5 px-2 py-0.5 border border-terracotta/20">
+                            Red-Team Critique (Skeptical Engine)
+                          </div>
+                          <span className="text-[10px] font-mono text-terracotta">Audit Result: 2 Gaps Found</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <h4 className="font-serif text-lg text-terracotta font-normal">"Flaw detected: Surrogate endpoint fixation, selection bias, and industry funding conflicts."</h4>
+                          <p className="text-xs text-foreground/85 leading-relaxed font-light italic">
+                            Critique: The cited studies are short-term (average 2–12 weeks) and measure surrogate markers (e.g., blood pressure, FMD) rather than actual clinical endpoints (heart attacks, mortality). 70% of trials were funded by major chocolate manufacturers (e.g., Mars, Inc.). Caloric density and sugar offsets are completely ignored.
+                          </p>
+                        </div>
+                        <div className="text-[10px] text-terracotta bg-terracotta/5 p-2 border border-terracotta/15 mt-2 font-mono">
+                          🔥 Action: Triggering targeted fallback search for long-term health outcomes and industry funding bias.
+                        </div>
+                      </div>
+                    )}
+
+                    {demoStep === "verdict" && (
+                      <div className="animate-fade-in flex flex-col gap-4">
+                        <div className="flex items-center justify-between border-b border-gold/20 pb-3">
+                          <div className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-gold-dark bg-gold/10 px-2 py-0.5 border border-gold/30">
+                            Nuanced Refined Verdict (The Reality)
+                          </div>
+                          <span className="text-[10px] font-mono text-gold-dark font-semibold">Confidence: Medium-Low</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <h4 className="font-serif text-lg text-foreground font-normal">"Marginally positive for temporary surrogate markers, but zero evidence for long-term heart disease reduction."</h4>
+                          <p className="text-xs text-foreground/80 leading-relaxed font-light">
+                            While dark chocolate causes temporary, modest reductions in blood pressure, there is zero clinical evidence that eating it prevents actual cardiovascular events or mortality. Caloric offset from sugar and fat makes it a neutral-to-negative lifestyle addition unless strictly portion-controlled.
+                          </p>
+                        </div>
+                        <div className="text-[10px] text-emerald-800 bg-emerald-50 p-2 border border-emerald-200/50 mt-2 font-mono">
+                          ✅ Outcome: Exposes the exact limits of science instead of generating a biased summary.
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+
+                {/* Comparison Section (Renaissance vs. Deep Research) */}
+                <div className="flex flex-col gap-5 mt-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-gold">Direct Comparison</div>
+                    <h2 className="font-serif text-xl font-normal text-foreground">Why Renaissance?</h2>
+                    <p className="text-xs text-muted-custom leading-relaxed">
+                      Unlike traditional search bots that fetch pages matching your query terms, Renaissance uses an adversarial loop built to challenge assumptions.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-card border border-border-custom p-6 shadow-sm flex flex-col gap-4 transition-colors duration-300">
+                      <h3 className="font-serif text-base text-muted-custom font-normal flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
+                        ChatGPT + Deep Research
+                      </h3>
+                      <ul className="text-xs space-y-3 text-foreground/75 font-light">
+                        <li className="flex gap-2 items-start">
+                          <span className="text-red-500 font-bold font-mono">✗</span>
+                          <span><strong>Confirmation Bias</strong>: Focuses search and summaries on <strong>proving</strong> your query statement correct.</span>
+                        </li>
+                        <li className="flex gap-2 items-start">
+                          <span className="text-red-500 font-bold font-mono">✗</span>
+                          <span><strong>Consensus Fixation</strong>: Ignores conflicting study data in favor of writing a smooth, high-level summary.</span>
+                        </li>
+                        <li className="flex gap-2 items-start">
+                          <span className="text-red-500 font-bold font-mono">✗</span>
+                          <span><strong>Absolute Certainty</strong>: Writes reports in an authoritative tone, hiding gaps and unknowns.</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-card border border-gold/30 p-6 shadow-sm flex flex-col gap-4 transition-colors duration-300 bg-gold/[0.02]">
+                      <h3 className="font-serif text-base text-gold-dark font-normal flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-gold"></span>
+                        Renaissance
+                      </h3>
+                      <ul className="text-xs space-y-3 text-foreground/75 font-light">
+                        <li className="flex gap-2 items-start">
+                          <span className="text-gold font-bold font-mono">✓</span>
+                          <span><strong>Self-Skeptical Search</strong>: Specifically designs search queries to look for contrarian facts and counterarguments.</span>
+                        </li>
+                        <li className="flex gap-2 items-start">
+                          <span className="text-gold font-bold font-mono">✓</span>
+                          <span><strong>Adversarial Audit</strong>: Runs an independent critic loop to call out logical leaps and funding conflicts.</span>
+                        </li>
+                        <li className="flex gap-2 items-start">
+                          <span className="text-gold font-bold font-mono">✓</span>
+                          <span><strong>Calibrated Confidence</strong>: Formulates what is strictly known vs. unknown and states exactly what triggers would change its mind.</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -519,7 +698,7 @@ export default function Home() {
                         </h2>
                       </div>
 
-                      <div className="prose prose-neutral max-w-none text-foreground text-sm leading-relaxed font-light dark:prose-invert">
+                      <div className="prose prose-neutral max-w-none text-foreground text-sm leading-relaxed font-light dark:prose-invert max-h-[550px] overflow-y-auto pr-4">
                         <ReactMarkdown
                           components={{
                             h1: ({node, ...props}) => <h1 className="font-serif text-2xl font-semibold text-foreground mt-8 mb-4 border-b border-border-subtle pb-2" {...props} />,
@@ -894,11 +1073,6 @@ export default function Home() {
       <footer className="border-t border-border-custom py-8 px-6 sm:px-12 bg-background/50 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] uppercase tracking-widest text-muted-custom font-medium transition-colors duration-300 relative z-10">
         <div>
           &copy; {new Date().getFullYear()} Renaissance. All rights reserved.
-        </div>
-        <div className="flex gap-4">
-          <span>Adversarial verification desk</span>
-          <span>|</span>
-          <span>Polymath Engine v1.2</span>
         </div>
       </footer>
       
