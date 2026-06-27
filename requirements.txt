@@ -29,3 +29,5 @@ langchain-tavily==0.2.18
 playwright
 langchain-openai
 langchain-google-genai
+langchain-groq
+rich

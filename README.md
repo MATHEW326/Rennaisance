@@ -59,8 +59,8 @@ graph TD
 ├── prompts.py          # Detailed system templates for Planner, Writer, and Critic agents
 ├── tools.py            # Custom tool decorators (web search, Playwright/BeautifulSoup crawler)
 ├── workflow.py         # Main execution orchestration of the parallel search/scrape/refine process
-├── main.py             # Console-based command line interface (CLI) client
-├── server.py           # FastAPI backend server with Server-Sent Events (SSE) log streaming
+├── cli.py              # Console-based command line interface (CLI) client
+├── main.py             # FastAPI backend server with Server-Sent Events (SSE) log streaming
 ├── requirements.txt    # Python backend package dependencies
 ├── prompt.md           # Master prompt guidelines and stop conditions
 ├── simplifed_prompt.md # Simplified/minimal agent ruleset reference
@@ -106,7 +106,7 @@ playwright install
 ### 3. Running the Python CLI Client
 You can run a research query directly inside your terminal:
 ```bash
-python main.py
+python cli.py
 ```
 *You will be prompted for a research question, and the step-by-step logs will output directly to your console before showing the final report.*
 
@@ -114,7 +114,7 @@ python main.py
 
 #### Start the FastAPI Server:
 ```bash
-python server.py
+python main.py
 ```
 *This launches the backend API on `http://127.0.0.1:8000` and prepares the server-sent event (SSE) log streaming endpoint.*
 

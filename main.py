@@ -5,41 +5,146 @@ import sys
 if "SSLKEYLOGFILE" in os.environ:
     del os.environ["SSLKEYLOGFILE"]
 
+# Configure UTF-8 output to avoid Windows console encoding issues when printing Web content
+if sys.platform.startswith("win"):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+import queue
+import threading
+import contextlib
+import json
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
 from workflow import run_research
 
-# Configure UTF-8 output to avoid Windows console encoding issues when printing Web content
-if sys.platform.startswith('win'):
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+app = FastAPI(
+    title="AI Research Assistant API",
+    version="1.0.0"
+)
 
-query = input("Research Question: ")
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-print("\nStarting research process...")
-result = run_research(query)
 
-if result.get("status") == "success":
-    print("\n" + "=" * 80)
-    print("FINAL REPORT")
-    print("=" * 80)
-    print(result["report"])
+# -----------------------------
+# Models
+# -----------------------------
+class ResearchRequest(BaseModel):
+    query: str
 
-    print("\n" + "=" * 80)
-    print("CRITIQUE")
-    print("=" * 80)
-    print(result["critique"])
 
-    print("\n" + "=" * 80)
-    print("INVESTIGATION SUMMARY")
-    print("=" * 80)
-    print(f"Successfully scraped sources ({len(result['sources'])}):")
-    for s in result["sources"]:
-        print(f"  - {s}")
-    
-    if result["skipped_sources"]:
-        print(f"\nSkipped / Failed sources ({len(result['skipped_sources'])}):")
-        for url, reason in result["skipped_sources"]:
-            # Truncate error reasons if they are too long
-            short_reason = reason[:80] + "..." if len(reason) > 80 else reason
-            print(f"  - {url}: {short_reason}")
-else:
-    print(f"\n❌ Research failed: {result.get('error')}")
+# -----------------------------
+# Health & Root Endpoints
+# -----------------------------
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "AI Research Assistant API",
+        "version": "1.0.0"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy"
+    }
+
+
+# -----------------------------
+# Streaming Helper
+# -----------------------------
+class QueueWriter:
+    def __init__(self, q):
+        self.q = q
+        self.original_stdout = sys.stdout
+
+    def write(self, message):
+        self.original_stdout.write(message)
+
+        if message.strip():
+            self.q.put(("log", message.strip()))
+
+    def flush(self):
+        self.original_stdout.flush()
+
+
+def run_research_thread(query: str, q: queue.Queue):
+    writer = QueueWriter(q)
+
+    with contextlib.redirect_stdout(writer):
+        try:
+            result = run_research(query)
+            q.put(("result", result))
+        except Exception as e:
+            q.put(("error", str(e)))
+
+
+# -----------------------------
+# Research Endpoint (Streaming)
+# -----------------------------
+@app.post("/api/research")
+async def research_endpoint(req: ResearchRequest):
+    q = queue.Queue()
+
+    t = threading.Thread(
+        target=run_research_thread,
+        args=(req.query, q),
+        daemon=True
+    )
+    t.start()
+
+    def event_generator():
+        while t.is_alive() or not q.empty():
+            try:
+                msg_type, data = q.get(timeout=0.5)
+
+                yield (
+                    f"event: {msg_type}\n"
+                    f"data: {json.dumps(data)}\n\n"
+                )
+
+            except queue.Empty:
+                continue
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream"
+    )
+
+
+# -----------------------------
+# Research Endpoint (Synchronous/Non-Streaming)
+# -----------------------------
+@app.post("/api/research/sync")
+async def research_sync_endpoint(req: ResearchRequest):
+    try:
+        result = run_research(req.query)
+        return result
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# -----------------------------
+# Local Development / Railway
+# -----------------------------
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000))
+    )
