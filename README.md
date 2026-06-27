@@ -6,7 +6,7 @@ Unlike standard AI search systems that generate answers instantaneously and suff
 
 ---
 
-## 🌟 Intent & Philosophy
+## Intent & Philosophy
 
 The project is built on a simple, powerful philosophy: **"Doubt is the origin of wisdom."** 
 
@@ -17,21 +17,18 @@ When answering complex inquiries, typical LLM pipelines immediately choose a nar
 
 ---
 
-## 🚀 Unique Selling Propositions (USPs)
+## Core Capabilities
 
-- **Self-Skeptical & Adversarial Loop:** Built with a writer-critic loop. The critic audits the initial findings, forces the system to run a second round of searches specifically targeting identified gaps, and refines the report.
-- **Multidimensional Planning:** The Planner agent deconstructs the research query into three distinct search vectors:
-  1. *Confirmatory query:* Seeks evidence supporting the primary hypothesis.
-  2. *Contrarian/Falsification query:* Seeks disconfirming evidence, alternative explanations, or criticisms.
-  3. *Mechanistic/Contextual query:* Seeks underlying biochemical, physics-based, or structural detail.
-- **Dynamic Token Budgeting:** When crawling web pages, the system dynamically calculates character allocations based on the number of crawled pages. It keeps the total text payload under a strict limit (~15,000 characters) to ensure it stays within rate limits and prevents context pollution, extracting only the most relevant text chunks using a custom term-frequency ranking.
-- **Immersive Editorial UI:** Features a high-fidelity Baroque ceiling fresco design system ("Renaissance theme") coupled with a real-time terminal log viewer, side-by-side report, adversarial critique panel, and bibliography manager.
-- **Fault-Tolerant Hybrid Scraper:** The crawler automatically attempts headless execution using Playwright to render SPA/JavaScript-heavy sites, falling back to standard `requests` + `BeautifulSoup` if Playwright is unavailable, and uses search engine snippets as a final safety fallback.
-- **LLM Agnostic with Intelligent Fallbacks:** Automatically detects and configures chains based on available keys: Groq (`llama-3.3-70b-versatile`), Google Gemini (`gemini-1.5-flash`), OpenAI (`gpt-4o-mini`), or Mistral (`mistral-large-latest`), featuring a seamless fallback chain in case of API rate limits or failures.
+- **Adversarial Writer-Critic Architecture:** Features a dual-agent workflow where an independent Critic agent audits the initial findings, identifies logical gaps, and triggers a secondary refinement search.
+- **Multidimensional Search Vectoring:** The Planner agent structures searches into confirmatory, contrarian (falsification), and mechanistic angles to ensure objective data collection.
+- **Context-Aware Page Chunking:** The web crawler splits scraped pages and ranks text chunks by term-frequency similarity against the user query, keeping the final consolidated payload under a ~15,000-character budget.
+- **Dynamic Crawler with Fallbacks:** Integrates headless browser automation via Playwright for dynamically-rendered sites, falling back to static HTTP requests, and search snippet aggregation if crawling fails.
+- **Multi-LLM Integration:** Supports Groq (Llama), Gemini, OpenAI, and Mistral models with automated API fallback chains.
+- **Web Interface:** Features a real-time log terminal, structured report views, red-team critiques, and source attribution.
 
 ---
 
-## 🛠️ System Architecture & Workflow
+## System Architecture & Workflow
 
 ```mermaid
 graph TD
@@ -55,7 +52,7 @@ graph TD
 
 ---
 
-## 📂 Directory Structure
+## Directory Structure
 
 ```text
 ├── agents.py           # Configuration for LLM clients and execution chains
@@ -75,7 +72,7 @@ graph TD
 
 ---
 
-## 🚦 Getting Started
+## Getting Started
 
 ### 1. Prerequisites
 - **Python 3.10+**
@@ -128,11 +125,11 @@ cd frontend
 npm install
 npm run dev
 ```
-*Open `http://localhost:3000` in your web browser to access the beautiful Renaissance dashboard.*
+*Open `http://localhost:3000` in your web browser to access the Renaissance dashboard.*
 
 ---
 
-## 📝 Documenting Evidence (Provisional Structure)
+## Documenting Evidence (Provisional Structure)
 Every final report structured by Renaissance includes:
 - **Evidence Supporting / Evidence Contradicting:** Balanced analysis presenting both sides of the question.
 - **Strongest Counterargument:** Highlighting the most challenging contradiction to the primary hypothesis.
