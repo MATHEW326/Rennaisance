@@ -35,14 +35,14 @@ When answering complex inquiries, typical LLM pipelines immediately choose a nar
 
 ```mermaid
 graph TD
-    A[User Inquiry] --> B[Planner Agent]
-    B -->|Generates 3 Queries| C[Parallel Web Search (Tavily)]
-    C -->|Extracts URL Candidates| D[Parallel Crawler (Playwright / BeautifulSoup)]
-    D -->|Semantic Chunking & Budgeting| E[Synthesis Writer Agent]
-    E -->|Generates Initial Report| F[Red-Team Critic Agent]
-    F -->|Identifies Gaps & New Queries| G[Refinement Web Search & Scrape]
-    G -->|Extracts Gaps Evidence| H[Writer & Critic Refinement]
-    H -->|Final Report & Critique| I[Interactive Editorial UI]
+    A["User Inquiry"] --> B["Planner Agent"]
+    B -->|Generates 3 Queries| C["Parallel Web Search (Tavily)"]
+    C -->|Extracts URL Candidates| D["Parallel Crawler (Playwright / BeautifulSoup)"]
+    D -->|Semantic Chunking & Budgeting| E["Synthesis Writer Agent"]
+    E -->|Generates Initial Report| F["Red-Team Critic Agent"]
+    F -->|Identifies Gaps & New Queries| G["Refinement Web Search & Scrape"]
+    G -->|Extracts Gaps Evidence| H["Writer & Critic Refinement"]
+    H -->|Final Report & Critique| I["Interactive Editorial UI"]
 ```
 
 ### The 6-Step Pipeline:
