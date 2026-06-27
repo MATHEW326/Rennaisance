@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FAF8F5; /* Warm vintage paper/parchment */
+  --foreground: #1A1A1A; /* Crisp dark ink */
+  --parchment: #FAF8F5;
+  --ink: #1A1A1A;
+  --card-bg: #FFFFFF;
+  --border-color: rgba(26, 26, 26, 0.12);
+  --border-subtle: rgba(26, 26, 26, 0.05);
+  --muted-text: rgba(26, 26, 26, 0.6);
+  --grid-dots: rgba(26, 26, 26, 0.05);
+  --grid-lines: rgba(26, 26, 26, 0.02);
+  
+  /* Polymath color system */
+  --gold: #C5A880; /* Muted vintage gold */
+  --gold-dark: #A3855C;
+  --terracotta: #C85C40; /* Terracotta orange */
+  --celestial: #2F4F4F; /* Dark slate green/blue */
+  
+  /* Font fallbacks mapped to standard variables */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --font-handwriting: var(--font-handwriting);
+}
+
+
+
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-parchment: var(--parchment);
+  --color-ink: var(--ink);
+  --color-card: var(--card-bg);
+  --color-border-custom: var(--border-color);
+  --color-border-subtle: var(--border-subtle);
+  --color-muted-custom: var(--muted-text);
+  
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-terracotta: var(--terracotta);
+  --color-celestial: var(--celestial);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --font-handwriting: var(--font-handwriting);
+}
+
+.font-handwriting {
+  font-family: var(--font-handwriting), cursive;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Polymath Aesthetic Utilities --- */
+
+/* Blueprint/Graph Paper background */
+.polymath-grid {
+  background-image: 
+    radial-gradient(circle, var(--grid-dots) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-lines) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-lines) 1px, transparent 1px);
+  background-size: 16px 16px, 64px 64px, 64px 64px;
+  background-position: center;
+}
+
+/* Subtle vintage noise overlay */
+.paper-texture::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* Classical double border style */
+.editorial-border {
+  border: 1px solid var(--border-color);
+  position: relative;
+  transition: border-color 0.3s ease;
+}
+.editorial-border::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  border: 1px solid var(--border-subtle);
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+/* Sketch/hand-drawn highlights */
+.sketch-line {
+  background-image: linear-gradient(120deg, rgba(197, 168, 128, 0.25) 0%, rgba(197, 168, 128, 0.1) 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 0.3em;
+  background-position: 0 88%;
+}
+
+/* Premium Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 26, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 26, 26, 0.4);
+}
+
+/* Interactive schematic pulse */
+@keyframes dash {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+.animated-dash {
+  stroke-dasharray: 8, 4;
+  animation: dash 5s linear infinite;
+}
+
+/* 3D Collage Perspective Container */
+.perspective-container {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+/* Floating animation classes */
+@keyframes float1 {
+  0%, 100% { transform: translateY(0px) rotate(var(--base-rot, 0deg)); }
+  50% { transform: translateY(-8px) rotate(calc(var(--base-rot, 0deg) + 0.5deg)); }
+}
+@keyframes float2 {
+  0%, 100% { transform: translateY(0px) rotate(var(--base-rot, 0deg)); }
+  50% { transform: translateY(-12px) rotate(calc(var(--base-rot, 0deg) - 0.5deg)); }
+}
+@keyframes float3 {
+  0%, 100% { transform: translateY(0px) rotate(var(--base-rot, 0deg)); }
+  50% { transform: translateY(-6px) rotate(calc(var(--base-rot, 0deg) + 1deg)); }
+}
+@keyframes rotate-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.float-delayed-1 {
+  animation: float1 7s ease-in-out infinite;
+}
+.float-delayed-2 {
+  animation: float2 8.5s ease-in-out infinite;
+}
+.float-delayed-3 {
+  animation: float3 6s ease-in-out infinite;
+}
+.rotate-slow {
+  animation: rotate-slow 60s linear infinite;
+}
+
+/* 3D interactive tilting card */
+.tilt-card {
+  transition: transform 0.25s cubic-bezier(0.215, 0.610, 0.355, 1), box-shadow 0.25s ease;
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0px);
+  will-change: transform;
+}
+.tilt-card:hover {
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(25px);
+  box-shadow: 0 35px 70px rgba(26, 26, 26, 0.15);
+  z-index: 50 !important;
+}
+
+
+/* Custom radial gradient for dark theme glows */
+.glow-celestial {
+  background: radial-gradient(circle, rgba(77, 139, 150, 0.08) 0%, transparent 70%);
+}
+
+.glow-gold {
+  background: radial-gradient(circle, rgba(197, 168, 128, 0.08) 0%, transparent 70%);
+}
+
