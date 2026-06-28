@@ -21,7 +21,10 @@ import {
   Maximize2,
   X,
   Sun,
-  Moon
+  Moon,
+  Settings,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 interface ResearchResult {
@@ -30,6 +33,15 @@ interface ResearchResult {
   critique: string;
   sources: string[];
   skipped_sources: [string, string][];
+  source_contents?: Record<string, string>;
+  claims?: Record<string, {
+    assertion: string;
+    source_url: string;
+    excerpt: string;
+    opposing: string;
+    quality_score: string;
+    confidence_rating: string;
+  }>;
 }
 
 
@@ -115,6 +127,32 @@ const stepDetails = [
 ];
 
 export default function Home() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeys, setApiKeys] = useState({
+    openai: "",
+    groq: "",
+    gemini: "",
+    mistral: "",
+    tavily: ""
+  });
+  const [showKey, setShowKey] = useState({
+    openai: false,
+    groq: false,
+    gemini: false,
+    mistral: false,
+    tavily: false
+  });
+
+  const [selectedCitationUrl, setSelectedCitationUrl] = useState<string | null>(null);
+  const [showCitationInspector, setShowCitationInspector] = useState(false);
+
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [showClaimInspector, setShowClaimInspector] = useState(false);
+
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -149,6 +187,28 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", "light");
   }, []);
 
+  // Load API keys from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedKeys = localStorage.getItem("renaissance_api_keys");
+      if (savedKeys) {
+        setApiKeys(JSON.parse(savedKeys));
+      }
+    } catch (e) {
+      console.error("Error loading API keys from localStorage:", e);
+    }
+  }, []);
+
+  const handleSaveKeys = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem("renaissance_api_keys", JSON.stringify(apiKeys));
+      setShowSettings(false);
+    } catch (e) {
+      console.error("Error saving API keys to localStorage:", e);
+    }
+  };
+
   // Slideshow & Quote interval timer
   useEffect(() => {
     if (hasInitiated) return;
@@ -158,6 +218,108 @@ export default function Home() {
     }, 6000);
     return () => clearInterval(interval);
   }, [hasInitiated]);
+
+  // Load historical sessions from localStorage on mount and restore active session
+  useEffect(() => {
+    setLoadingSessions(true);
+    try {
+      const localData = localStorage.getItem("renaissance_sessions");
+      if (localData) {
+        const loadedSessions = JSON.parse(localData);
+        setSessions(loadedSessions);
+        
+        const activeId = localStorage.getItem("renaissance_active_session_id");
+        if (activeId) {
+          const session = loadedSessions.find((s: any) => s.id === activeId);
+          if (session) {
+            setQuery(session.query);
+            setResult({
+              status: "success",
+              report: session.report,
+              critique: session.critique,
+              sources: session.sources,
+              skipped_sources: session.skipped_sources,
+              source_contents: session.source_contents,
+              claims: session.claims
+            });
+            setLogs([
+              "Restored active research workspace from storage.",
+              `Topic: "${session.query}"`
+            ]);
+            setActiveSessionId(activeId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error loading saved sessions from localStorage:", err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, []);
+
+  // Auto save session when research pipeline completes
+  useEffect(() => {
+    if (result && result.status === "success" && !activeSessionId) {
+      const alreadyExists = sessions.some(s => s.query.trim().toLowerCase() === query.trim().toLowerCase());
+      if (!alreadyExists) {
+        const newSession = {
+          id: Math.random().toString(36).substring(2, 9),
+          query: query,
+          report: result.report,
+          critique: result.critique,
+          sources: result.sources,
+          skipped_sources: result.skipped_sources,
+          source_contents: result.source_contents,
+          claims: result.claims,
+          createdAt: {
+            seconds: Math.floor(Date.now() / 1000)
+          }
+        };
+        const updated = [newSession, ...sessions];
+        setSessions(updated);
+        localStorage.setItem("renaissance_sessions", JSON.stringify(updated));
+        setActiveSessionId(newSession.id);
+        localStorage.setItem("renaissance_active_session_id", newSession.id);
+      }
+    }
+  }, [result, activeSessionId, sessions, query]);
+
+  const loadSavedSession = (session: any) => {
+    setQuery(session.query);
+    setResult({
+      status: "success",
+      report: session.report,
+      critique: session.critique,
+      sources: session.sources,
+      skipped_sources: session.skipped_sources,
+      source_contents: session.source_contents,
+      claims: session.claims
+    });
+    setLogs([
+      "Loading research from library...",
+      `Query: "${session.query}"`,
+      "Successfully loaded saved report.",
+      "Successfully loaded critic critique.",
+      "Successfully loaded crawled urls. Audit complete."
+    ]);
+    setActiveSessionId(session.id);
+    localStorage.setItem("renaissance_active_session_id", session.id);
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this research report from your library?")) return;
+    try {
+      const updated = sessions.filter(s => s.id !== sessionId);
+      setSessions(updated);
+      localStorage.setItem("renaissance_sessions", JSON.stringify(updated));
+      if (activeSessionId === sessionId) {
+        resetWorkspace();
+      }
+    } catch (err) {
+      console.error("Error deleting session:", err);
+    }
+  };
 
   // Auto scroll logs
   useEffect(() => {
@@ -176,13 +338,22 @@ export default function Home() {
     setActiveTab("report");
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      let backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      if (backendUrl.endsWith("/api/research")) {
+        backendUrl = backendUrl.substring(0, backendUrl.length - "/api/research".length);
+      }
+      if (backendUrl.endsWith("/")) {
+        backendUrl = backendUrl.slice(0, -1);
+      }
       const response = await fetch(`${backendUrl}/api/research`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ query: searchQuery }),
+        body: JSON.stringify({ 
+          query: searchQuery,
+          api_keys: apiKeys
+        }),
       });
 
       if (!response.ok) {
@@ -253,22 +424,256 @@ export default function Home() {
     setQuery(q);
     handleSearch(q);
   };
+  const markdownComponents = {
+    h1: ({children}: any) => <h1 className="font-serif text-2xl font-bold text-foreground mt-8 mb-4 border-b border-border-subtle pb-2">{children}</h1>,
+    h2: ({children}: any) => <h2 className="font-serif text-xl font-semibold text-foreground mt-8 mb-4">{children}</h2>,
+    h3: ({children}: any) => <h3 className="font-sans text-xs font-bold text-gold-dark tracking-wider uppercase mt-6 mb-2">{children}</h3>,
+    p: ({children}: any) => <p className="mb-4 text-foreground/95 leading-relaxed font-normal">{children}</p>,
+    ul: ({children}: any) => <ul className="list-disc pl-5 mb-5 space-y-2 text-foreground/90 font-normal">{children}</ul>,
+    ol: ({children}: any) => <ol className="list-decimal pl-5 mb-5 space-y-2 text-foreground/90 font-normal">{children}</ol>,
+    li: ({children}: any) => <li className="pl-1 text-foreground/90 font-normal">{children}</li>,
+    strong: ({children}: any) => <strong className="font-bold text-foreground">{children}</strong>,
+    code: ({children}: any) => <code className="font-mono text-xs bg-foreground/5 px-1 py-0.5 text-foreground">{children}</code>,
+    blockquote: ({children}: any) => <blockquote className="border-l-2 border-gold pl-4 italic text-foreground/90 my-4 bg-gold/5 py-2 pr-2 font-normal">{children}</blockquote>,
+    a: ({href, children}: any) => {
+      console.log("[DEBUG markdownComponents.a] href received:", JSON.stringify(href));
+      if (href && href.startsWith("cite:")) {
+        const citeUrl = href.substring(5);
+        console.log("[DEBUG cite] extracted URL:", JSON.stringify(citeUrl));
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              console.log("[DEBUG cite click] opening URL:", citeUrl);
+              window.open(citeUrl, "_blank", "noopener,noreferrer");
+            }}
+            className="inline-flex items-center gap-0.5 text-xs text-gold hover:text-gold-dark hover:underline bg-gold/5 border border-gold/20 px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer"
+          >
+            {children}
+          </button>
+        );
+      }
+      if (href && href.startsWith("claim:")) {
+        const claimId = href.substring(6);
+        return (
+          <span
+            onClick={(e) => {
+              e.preventDefault();
+              setSelectedClaimId(claimId);
+              setShowClaimInspector(true);
+            }}
+            className="inline decoration-dotted decoration-2 decoration-gold/80 hover:bg-gold/10 cursor-pointer transition-colors duration-200 font-medium px-0.5 rounded-sm border-b border-dashed border-gold/60 text-foreground"
+            title="Click to audit this claim"
+          >
+            {children}
+          </span>
+        );
+      }
+      return (
+        <a 
+          className="text-foreground underline hover:text-gold transition-colors font-medium break-all" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          href={href}
+        >
+          {children}
+        </a>
+      );
+    }
+  };
+
+  const processReportText = (text: string) => {
+    return text
+      .replace(/^#\s+Research\s+Report/i, "")
+      .replace(/^#\s+.*?\n/i, "")
+      .replace(/\((Source|source):\s*(https?:\/\/[^\s)]+)\)/g, "([🔗 Cite](cite:$2))")
+      .replace(/\[(Source|source):\s*(https?:\/\/[^\s\]]+)\]/g, "[[🔗 Cite](cite:$2)]")
+      .replace(/<claim\s+id="([^"]+)"[^>]*>(.*?)<\/claim>/g, "[$2](claim:$1)");
+  };
 
   const resetWorkspace = () => {
     setQuery("");
     setLogs([]);
     setResult(null);
     setError(null);
+    setActiveSessionId(null);
+    localStorage.removeItem("renaissance_active_session_id");
   };
 
   const sampleQueries = [
-    "Is dark chocolate actually beneficial for cardiovascular health?",
-    "How do microplastics cross the blood-brain barrier and what are the biological implications?",
-    "What is the scientific consensus on blue light exposure and its direct impact on sleep latency?"
+    "Does chronic cortisol elevation directly cause neurodegeneration in the hippocampus, or are there confounding factors?",
+    "What is the true efficacy of mindfulness-based stress reduction (MBSR) programs when accounting for placebo and publication bias?",
+    "Are the physiological effects of acute stress definitively linked to long-term autoimmune disease flare-ups?"
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-gold selection:text-background paper-texture flex flex-col justify-between transition-colors duration-300 relative">
+
+      {/* Settings Floating Button */}
+      <div className="absolute top-6 right-6 sm:top-8 sm:right-12 z-50">
+        <button
+          onClick={() => setShowSettings(true)}
+          className="flex items-center gap-2 bg-card/85 hover:bg-gold/10 backdrop-blur-md border border-border-custom px-4 py-2 text-xs uppercase tracking-widest font-bold text-foreground transition-all duration-300 cursor-pointer shadow-sm"
+        >
+          <Settings className="w-4 h-4 text-gold" />
+          Settings
+        </button>
+      </div>
+
+      {/* API Keys Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border-custom w-full max-w-lg p-6 sm:p-8 shadow-2xl relative flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar animate-fade-in">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gold flex items-center gap-1.5">
+                <Settings className="w-3.5 h-3.5" />
+                Control Desk
+              </div>
+              <h2 className="font-serif text-2xl font-normal text-foreground">API Configuration</h2>
+              <p className="text-xs text-muted-custom leading-relaxed font-light">
+                Configure your own API keys. These are stored locally in your browser and are sent only to your Renaissance research backend.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveKeys} className="flex flex-col gap-5">
+              <div className="space-y-4 font-sans">
+                {/* OpenAI Key */}
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-foreground">OpenAI API Key</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKey.openai ? "text" : "password"}
+                      value={apiKeys.openai}
+                      onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
+                      placeholder="sk-..."
+                      className="text-xs bg-background border border-border-custom pl-3 pr-10 py-2.5 w-full outline-none text-foreground placeholder:text-muted-custom/70 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey({ ...showKey, openai: !showKey.openai })}
+                      className="absolute right-3 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+                    >
+                      {showKey.openai ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-muted-custom/85">Required for running GPT-4o-mini as a backup model.</span>
+                </div>
+
+                {/* Groq Key */}
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-foreground">Groq API Key</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKey.groq ? "text" : "password"}
+                      value={apiKeys.groq}
+                      onChange={(e) => setApiKeys({ ...apiKeys, groq: e.target.value })}
+                      placeholder="gsk_..."
+                      className="text-xs bg-background border border-border-custom pl-3 pr-10 py-2.5 w-full outline-none text-foreground placeholder:text-muted-custom/70 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey({ ...showKey, groq: !showKey.groq })}
+                      className="absolute right-3 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+                    >
+                      {showKey.groq ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-muted-custom/85">Required for running the primary Llama-3.3-70b research agent.</span>
+                </div>
+
+                {/* Gemini Key */}
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-foreground">Gemini API Key</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKey.gemini ? "text" : "password"}
+                      value={apiKeys.gemini}
+                      onChange={(e) => setApiKeys({ ...apiKeys, gemini: e.target.value })}
+                      placeholder="AIzaSy..."
+                      className="text-xs bg-background border border-border-custom pl-3 pr-10 py-2.5 w-full outline-none text-foreground placeholder:text-muted-custom/70 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey({ ...showKey, gemini: !showKey.gemini })}
+                      className="absolute right-3 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+                    >
+                      {showKey.gemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-muted-custom/85">Required for running Gemini-1.5-flash fallback agent.</span>
+                </div>
+
+                {/* Mistral Key */}
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-foreground">Mistral API Key</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKey.mistral ? "text" : "password"}
+                      value={apiKeys.mistral}
+                      onChange={(e) => setApiKeys({ ...apiKeys, mistral: e.target.value })}
+                      placeholder="your-key..."
+                      className="text-xs bg-background border border-border-custom pl-3 pr-10 py-2.5 w-full outline-none text-foreground placeholder:text-muted-custom/70 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey({ ...showKey, mistral: !showKey.mistral })}
+                      className="absolute right-3 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+                    >
+                      {showKey.mistral ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-muted-custom/85">Optional fallback for Mistral Large models.</span>
+                </div>
+
+                {/* Tavily Key */}
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-foreground">Tavily API Key</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showKey.tavily ? "text" : "password"}
+                      value={apiKeys.tavily}
+                      onChange={(e) => setApiKeys({ ...apiKeys, tavily: e.target.value })}
+                      placeholder="tvly-..."
+                      className="text-xs bg-background border border-border-custom pl-3 pr-10 py-2.5 w-full outline-none text-foreground placeholder:text-muted-custom/70 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey({ ...showKey, tavily: !showKey.tavily })}
+                      className="absolute right-3 text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+                    >
+                      {showKey.tavily ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-muted-custom/85">Required for web search capability.</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end border-t border-border-subtle pt-4 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="text-[10px] uppercase tracking-widest font-bold border border-border-custom hover:border-foreground px-4 py-2.5 transition-all duration-300 cursor-pointer bg-transparent text-muted-custom hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="text-[10px] uppercase tracking-widest font-bold bg-foreground text-background hover:bg-gold hover:text-background px-5 py-2.5 transition-all duration-300 cursor-pointer border-0"
+                >
+                  Save Configuration
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Immersive Baroque Ceiling Fresco Background */}
       <div 
@@ -329,7 +734,7 @@ export default function Home() {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="e.g., 'Is there empirical evidence supporting the physiological benefits of cold water immersion?'"
-                      className="w-full min-h-[90px] px-2 py-1 bg-transparent text-foreground focus:outline-none font-serif text-lg placeholder:text-muted-custom/50 resize-none leading-relaxed text-left"
+                      className="w-full min-h-[90px] px-2 py-1 bg-transparent text-foreground focus:outline-none font-serif text-lg placeholder:text-muted-custom/70 resize-none leading-relaxed text-left"
                     />
                     <button
                       type="submit"
@@ -345,7 +750,7 @@ export default function Home() {
 
               {/* Inquiry Catalysts (Templates) */}
               <div className="flex flex-col gap-3 w-full max-w-4xl">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-custom/75 flex items-center justify-center gap-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-custom/85 flex items-center justify-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-gold" />
                   Inquiry Catalysts (Click to investigate)
                 </div>
@@ -356,7 +761,7 @@ export default function Home() {
                       onClick={() => selectSampleQuery(q)}
                       className="group flex justify-between items-center text-left text-xs bg-card hover:bg-gold/10 border border-border-custom p-3 transition-all duration-300 shadow-sm cursor-pointer"
                     >
-                      <span className="font-serif text-sm text-foreground/80 group-hover:text-foreground transition-colors pr-4">
+                      <span className="font-serif text-sm text-foreground/90 group-hover:text-foreground transition-colors pr-4">
                         "{q}"
                       </span>
                       <ArrowUpRight className="w-4 h-4 text-gold group-hover:text-terracotta transition-colors shrink-0" />
@@ -432,7 +837,7 @@ export default function Home() {
                         </div>
                         <div className="flex flex-col gap-2">
                           <h4 className="font-serif text-lg text-foreground font-normal">"Yes, dark chocolate improves heart health by lowering blood pressure due to flavanols."</h4>
-                          <p className="text-xs text-foreground/80 leading-relaxed font-light">
+                          <p className="text-xs text-foreground/90 leading-relaxed font-light">
                             Dark chocolate is rich in flavanols (especially epicatechin), which stimulate nitric oxide production in blood vessels, causing vasodilation and reduced blood pressure. Dozens of published randomized trials confirm flavanols reduce cardiovascular risk.
                           </p>
                         </div>
@@ -472,7 +877,7 @@ export default function Home() {
                         </div>
                         <div className="flex flex-col gap-2">
                           <h4 className="font-serif text-lg text-foreground font-normal">"Marginally positive for temporary surrogate markers, but zero evidence for long-term heart disease reduction."</h4>
-                          <p className="text-xs text-foreground/80 leading-relaxed font-light">
+                          <p className="text-xs text-foreground/90 leading-relaxed font-light">
                             While dark chocolate causes temporary, modest reductions in blood pressure, there is zero clinical evidence that eating it prevents actual cardiovascular events or mortality. Caloric offset from sugar and fat makes it a neutral-to-negative lifestyle addition unless strictly portion-controlled.
                           </p>
                         </div>
@@ -490,18 +895,18 @@ export default function Home() {
                   <div className="flex flex-col gap-1">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-gold">Direct Comparison</div>
                     <h2 className="font-serif text-xl font-normal text-foreground">Why Renaissance?</h2>
-                    <p className="text-xs text-muted-custom leading-relaxed">
+                    <p className="text-xs text-foreground/80 leading-relaxed">
                       Unlike traditional search bots that fetch pages matching your query terms, Renaissance uses an adversarial loop built to challenge assumptions.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-card border border-border-custom p-6 shadow-sm flex flex-col gap-4 transition-colors duration-300">
-                      <h3 className="font-serif text-base text-muted-custom font-normal flex items-center gap-2">
+                      <h3 className="font-serif text-base text-foreground/90 font-medium flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
                         ChatGPT + Deep Research
                       </h3>
-                      <ul className="text-xs space-y-3 text-foreground/75 font-light">
+                      <ul className="text-xs space-y-3 text-foreground/90 font-normal">
                         <li className="flex gap-2 items-start">
                           <span className="text-red-500 font-bold font-mono">✗</span>
                           <span><strong>Confirmation Bias</strong>: Focuses search and summaries on <strong>proving</strong> your query statement correct.</span>
@@ -518,11 +923,11 @@ export default function Home() {
                     </div>
 
                     <div className="bg-card border border-gold/30 p-6 shadow-sm flex flex-col gap-4 transition-colors duration-300 bg-gold/[0.02]">
-                      <h3 className="font-serif text-base text-gold-dark font-normal flex items-center gap-2">
+                      <h3 className="font-serif text-base text-gold-dark font-medium flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-gold"></span>
                         Renaissance
                       </h3>
-                      <ul className="text-xs space-y-3 text-foreground/75 font-light">
+                      <ul className="text-xs space-y-3 text-foreground/90 font-normal">
                         <li className="flex gap-2 items-start">
                           <span className="text-gold font-bold font-mono">✓</span>
                           <span><strong>Self-Skeptical Search</strong>: Specifically designs search queries to look for contrarian facts and counterarguments.</span>
@@ -641,6 +1046,57 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Research Library List (Sidebar) */}
+              <div className="bg-card border border-border-custom p-5 shadow-sm flex flex-col gap-4 transition-colors duration-300">
+                <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-muted-custom flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-gold" />
+                    Research Library ({sessions.length})
+                  </div>
+                </div>
+                
+                {loadingSessions ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-gold" />
+                  </div>
+                ) : sessions.length > 0 ? (
+                  <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                    {sessions.map((session) => (
+                      <div
+                        key={session.id}
+                        onClick={() => loadSavedSession(session)}
+                        className={`group flex justify-between items-center text-left text-xs p-2.5 border transition-all duration-300 shadow-sm cursor-pointer ${
+                          activeSessionId === session.id
+                            ? "bg-gold/10 border-gold"
+                            : "bg-card hover:bg-gold/5 border-border-custom"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-0.5 min-w-0 flex-1 pr-2">
+                          <span className="font-serif text-xs text-foreground/90 font-medium truncate group-hover:text-foreground">
+                            {session.query}
+                          </span>
+                          <span className="text-[8px] text-muted-custom font-mono">
+                            {session.createdAt ? new Date(session.createdAt.seconds * 1000).toLocaleDateString() : "Just now"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteSession(e, session.id!)}
+                          className="opacity-0 group-hover:opacity-100 hover:text-terracotta text-muted-custom p-1 transition-opacity duration-300"
+                          title="Delete from Library"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-custom/80 italic font-light text-center py-4">
+                    Your library is empty. Run queries to save them.
+                  </p>
+                )}
+              </div>
+
               {/* Mobile Tab Selectors for Right Side (only visible on mobile/tablet) */}
               <div className="flex border border-border-custom bg-card p-1 lg:hidden transition-colors duration-300">
                 <button
@@ -681,114 +1137,145 @@ export default function Home() {
               ) : result ? (
                 <div className="flex flex-col gap-6">
                   
-                  {/* Desktop Layout - All panels displayed in a clean, editorial configuration */}
+                  {/* Desktop Tab Selector (Horizontal tabs) */}
+                  <div className="hidden lg:flex border border-border-custom bg-card p-1 transition-colors duration-300">
+                    <button
+                      onClick={() => setActiveTab("report")}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-widest transition-all duration-200 border-0 cursor-pointer ${
+                        activeTab === "report" 
+                          ? "bg-foreground text-background" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/[0.02]"
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      Investigation Report
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("critique")}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-widest transition-all duration-200 border-0 cursor-pointer ${
+                        activeTab === "critique" 
+                          ? "bg-foreground text-background" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/[0.02]"
+                      }`}
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5 text-terracotta" />
+                      Adversarial Audit &amp; Critique
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("sources")}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-widest transition-all duration-200 border-0 cursor-pointer ${
+                        activeTab === "sources" 
+                          ? "bg-foreground text-background" 
+                          : "text-muted-custom hover:text-foreground hover:bg-foreground/[0.02]"
+                      }`}
+                    >
+                      <LinkIcon className="w-3.5 h-3.5 text-gold" />
+                      Literature &amp; Sources ({result.sources.length + result.skipped_sources.length})
+                    </button>
+                  </div>
+
+                  {/* Desktop Layout - Conditionally display panel based on activeTab */}
                   <div className="hidden lg:grid grid-cols-1 gap-6">
                     
                     {/* Primary Report */}
-                    <article className="bg-card border border-border-custom p-8 sm:p-12 shadow-sm relative transition-colors duration-300">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-no-repeat pointer-events-none" style={{ backgroundImage: "linear-gradient(135deg, transparent 50%, rgba(197, 168, 128, 0.08) 50%)" }} />
-                      
-                      <div className="flex flex-col gap-3 border-b border-border-subtle pb-6 mb-8">
-                        <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-gold-dark uppercase">
-                          <BookOpen className="w-3.5 h-3.5 text-gold" />
-                          Investigation Report
+                    {activeTab === "report" && (
+                      <article className="bg-card border border-border-custom p-8 sm:p-12 shadow-sm relative transition-colors duration-300 min-h-[500px]">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-no-repeat pointer-events-none" style={{ backgroundImage: "linear-gradient(135deg, transparent 50%, rgba(197, 168, 128, 0.08) 50%)" }} />
+                        
+                        <div className="flex flex-col gap-3 border-b border-border-subtle pb-6 mb-8">
+                          <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-gold-dark uppercase">
+                            <BookOpen className="w-3.5 h-3.5 text-gold" />
+                            Investigation Report
+                          </div>
+                          <h2 className="font-serif text-3xl sm:text-4xl font-normal leading-tight">
+                            {result.report.split("\n")[2]?.replace("#", "").replace(/\*\*/g, "").trim() || "Analysis Findings"}
+                          </h2>
                         </div>
-                        <h2 className="font-serif text-3xl sm:text-4xl font-normal leading-tight">
-                          {result.report.split("\n")[2]?.replace("#", "").replace(/\*\*/g, "").trim() || "Analysis Findings"}
-                        </h2>
-                      </div>
 
-                      <div className="prose prose-neutral max-w-none text-foreground text-sm leading-relaxed font-light dark:prose-invert max-h-[550px] overflow-y-auto pr-4">
-                        <ReactMarkdown
-                          components={{
-                            h1: ({node, ...props}) => <h1 className="font-serif text-2xl font-semibold text-foreground mt-8 mb-4 border-b border-border-subtle pb-2" {...props} />,
-                            h2: ({node, ...props}) => <h2 className="font-serif text-xl font-normal text-foreground mt-8 mb-4" {...props} />,
-                            h3: ({node, ...props}) => <h3 className="font-sans text-xs font-bold text-gold-dark tracking-wider uppercase mt-6 mb-2" {...props} />,
-                            p: ({node, ...props}) => <p className="mb-4 text-foreground/85 leading-relaxed font-light" {...props} />,
-                            ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-5 space-y-2 text-foreground/80" {...props} />,
-                            ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-5 space-y-2 text-foreground/80" {...props} />,
-                            li: ({node, ...props}) => <li className="pl-1" {...props} />,
-                            strong: ({node, ...props}) => <strong className="font-semibold text-foreground" {...props} />,
-                            code: ({node, ...props}) => <code className="font-mono text-xs bg-foreground/5 px-1 py-0.5 text-foreground" {...props} />,
-                            blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-gold pl-4 italic text-foreground/75 my-4 bg-gold/5 py-2 pr-2" {...props} />,
-                            a: ({node, ...props}) => <a className="text-foreground underline hover:text-gold transition-colors font-medium break-all" target="_blank" rel="noopener noreferrer" {...props} />
-                          }}
-                        >
-                          {/* Strip default title header from output to prevent double header display */}
-                          {result.report.replace(/^#\s+Research\s+Report/i, "").replace(/^#\s+.*?\n/i, "")}
-                        </ReactMarkdown>
-                      </div>
-                    </article>
+                        <div className="prose prose-neutral max-w-none text-foreground text-[15px] leading-relaxed dark:prose-invert max-h-[550px] overflow-y-auto pr-4 font-normal">
+                          <ReactMarkdown components={markdownComponents}>
+                            {processReportText(result.report)}
+                          </ReactMarkdown>
+                        </div>
+                      </article>
+                    )}
 
                     {/* Adversarial Critique (Red Team) */}
-                    <div className="bg-card border border-terracotta/25 shadow-sm overflow-hidden transition-colors duration-300">
-                      <div className="bg-terracotta/5 border-b border-terracotta/15 px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-terracotta">
-                          <ShieldAlert className="w-4 h-4" />
-                          Adversarial Audit &amp; Gap Critique
+                    {activeTab === "critique" && (
+                      <div className="bg-card border border-terracotta/25 shadow-sm overflow-hidden transition-colors duration-300 min-h-[500px]">
+                        <div className="bg-terracotta/5 border-b border-terracotta/15 px-6 py-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-terracotta">
+                            <ShieldAlert className="w-4 h-4" />
+                            Adversarial Audit &amp; Gap Critique
+                          </div>
+                          <span className="text-[9px] bg-terracotta/10 text-terracotta px-2 py-0.5 font-mono uppercase tracking-widest font-semibold">
+                            RED TEAM CHECK
+                          </span>
                         </div>
-                        <span className="text-[9px] bg-terracotta/10 text-terracotta px-2 py-0.5 font-mono uppercase tracking-widest font-semibold">
-                          RED TEAM CHECK
-                        </span>
+                        <div className="p-6 sm:p-8 text-[15px] sm:text-base font-serif italic text-foreground bg-terracotta/[0.01] leading-relaxed whitespace-pre-wrap max-h-[550px] overflow-y-auto pr-4 custom-scrollbar font-normal">
+                          {result.critique}
+                        </div>
                       </div>
-                      <div className="p-6 sm:p-8 text-sm sm:text-base font-serif italic text-foreground/90 bg-terracotta/[0.01] leading-relaxed font-light whitespace-pre-wrap">
-                        {result.critique}
-                      </div>
-                    </div>
+                    )}
 
                     {/* Sources Audited */}
-                    <div className="bg-card border border-border-custom shadow-sm overflow-hidden transition-colors duration-300">
-                      <div className="bg-foreground/5 border-b border-border-subtle px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-custom">
-                          <LinkIcon className="w-4 h-4 text-gold" />
-                          Investigated Literature &amp; URLs ({result.sources.length + result.skipped_sources.length})
+                    {activeTab === "sources" && (
+                      <div className="bg-card border border-border-custom shadow-sm overflow-hidden transition-colors duration-300 min-h-[500px]">
+                        <div className="bg-foreground/5 border-b border-border-subtle px-6 py-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-custom">
+                            <LinkIcon className="w-4 h-4 text-gold" />
+                            Investigated Literature &amp; URLs ({result.sources.length + result.skipped_sources.length})
+                          </div>
                         </div>
-                      </div>
-                      <div className="p-6 bg-card flex flex-col gap-6 text-xs transition-colors duration-300">
-                        {/* Successful */}
-                        <div>
-                          <h4 className="font-bold text-gold-dark mb-3 uppercase tracking-widest text-[9px] flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            Successfully Scraped &amp; Ingested
-                          </h4>
-                          {result.sources.length > 0 ? (
-                            <ul className="space-y-2">
-                              {result.sources.map((src, i) => (
-                                <li key={i} className="flex gap-2 items-center">
-                                  <a href={src} target="_blank" rel="noopener noreferrer" className="text-foreground/75 hover:text-foreground hover:underline break-all font-mono text-[11px] bg-foreground/[0.02] px-2 py-1 border border-border-custom flex-1">
-                                    {src}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-muted-custom italic font-light">No full pages scraped.</p>
+                        <div className="p-6 bg-card flex flex-col gap-6 text-xs transition-colors duration-300 max-h-[550px] overflow-y-auto pr-4 custom-scrollbar">
+                          {/* Successful */}
+                          <div>
+                            <h4 className="font-bold text-gold-dark mb-3 uppercase tracking-widest text-[9px] flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              Successfully Scraped &amp; Ingested
+                            </h4>
+                            {result.sources.length > 0 ? (
+                              <ul className="space-y-2">
+                                {result.sources.map((src, i) => (
+                                  <li key={i} className="flex gap-2 items-center">
+                                    <a href={src} target="_blank" rel="noopener noreferrer" className="text-foreground/85 hover:text-foreground hover:underline break-all font-mono text-[11px] bg-foreground/[0.02] px-2 py-1 border border-border-custom flex-1">
+                                      {src}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-muted-custom italic font-light">No full pages scraped.</p>
+                            )}
+                          </div>
+
+                          {/* Failed / Skipped */}
+                          {result.skipped_sources.length > 0 && (
+                            <div className="border-t border-border-subtle pt-4">
+                              <h4 className="font-bold text-terracotta mb-2 uppercase tracking-widest text-[9px] flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5 text-terracotta" />
+                                Skipped / Connection Failed
+                              </h4>
+                              <p className="text-[10.5px] text-muted-custom/90 leading-relaxed font-light mb-3 italic bg-terracotta/[0.02] p-2 border border-terracotta/10">
+                                💡 <strong>Note:</strong> Automated crawlers can sometimes be blocked by firewalls or cloudflare protection even if the site is working. We advise verifying the source manually by clicking the link.
+                              </p>
+                              <ul className="space-y-2">
+                                {result.skipped_sources.map(([url, reason], i) => (
+                                  <li key={i} className="flex flex-col md:flex-row gap-1 md:items-center bg-terracotta/5 p-2 border border-terracotta/10">
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-muted-custom hover:text-foreground underline break-all font-mono text-[11px] flex-1">
+                                      {url}
+                                    </a>
+                                    <span className="text-[10px] text-terracotta font-mono italic px-2 flex-1 break-words">
+                                      [{reason}]
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           )}
                         </div>
-
-                        {/* Failed / Skipped */}
-                        {result.skipped_sources.length > 0 && (
-                          <div className="border-t border-border-subtle pt-4">
-                            <h4 className="font-bold text-terracotta mb-3 uppercase tracking-widest text-[9px] flex items-center gap-1">
-                              <AlertCircle className="w-3.5 h-3.5 text-terracotta" />
-                              Skipped / Connection Failed
-                            </h4>
-                            <ul className="space-y-2">
-                              {result.skipped_sources.map(([url, reason], i) => (
-                                <li key={i} className="flex flex-col md:flex-row gap-1 md:items-center bg-terracotta/5 p-2 border border-terracotta/10">
-                                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-muted-custom hover:text-foreground underline break-all font-mono text-[11px] flex-1">
-                                    {url}
-                                  </a>
-                                  <span className="text-[10px] text-terracotta font-mono italic px-2">
-                                    [{reason}]
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                       </div>
-                    </div>
+                    )}
 
                   </div>
 
@@ -801,8 +1288,10 @@ export default function Home() {
                             {result.report.split("\n")[2]?.replace("#", "").replace(/\*\*/g, "").trim() || "Analysis Findings"}
                           </h2>
                         </div>
-                        <div className="prose prose-neutral max-w-none text-foreground text-xs leading-relaxed font-light dark:prose-invert">
-                          <ReactMarkdown>{result.report.replace(/^#\s+Research\s+Report/i, "").replace(/^#\s+.*?\n/i, "")}</ReactMarkdown>
+                        <div className="prose prose-neutral max-w-none text-foreground text-[14px] leading-relaxed dark:prose-invert font-normal">
+                          <ReactMarkdown components={markdownComponents}>
+                            {processReportText(result.report)}
+                          </ReactMarkdown>
                         </div>
                       </article>
                     )}
@@ -813,9 +1302,11 @@ export default function Home() {
                           <ShieldAlert className="w-4 h-4" />
                           Red Team Critique
                         </h3>
-                        <p className="text-sm font-serif italic text-foreground/95 leading-relaxed whitespace-pre-wrap">
-                          {result.critique}
-                        </p>
+                        <div className="prose prose-neutral max-w-none text-foreground text-[14.5px] leading-relaxed dark:prose-invert font-normal">
+                          <ReactMarkdown components={markdownComponents}>
+                            {processReportText(result.critique)}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     )}
 
@@ -829,7 +1320,7 @@ export default function Home() {
                           <ul className="space-y-2">
                             {result.sources.map((src, i) => (
                               <li key={i} className="flex gap-2">
-                                <a href={src} target="_blank" rel="noopener noreferrer" className="text-foreground/70 hover:text-foreground underline break-all font-mono text-[10px]">
+                                <a href={src} target="_blank" rel="noopener noreferrer" className="text-foreground/85 hover:text-foreground underline break-all font-mono text-[10px]">
                                   {src}
                                 </a>
                               </li>
@@ -838,10 +1329,13 @@ export default function Home() {
                         </div>
                         {result.skipped_sources.length > 0 && (
                           <div className="border-t border-border-subtle pt-4">
-                            <h4 className="font-bold text-terracotta mb-3 uppercase tracking-widest text-[9px] flex items-center gap-1">
+                            <h4 className="font-bold text-terracotta mb-2 uppercase tracking-widest text-[9px] flex items-center gap-1">
                               <AlertCircle className="w-3.5 h-3.5 text-terracotta" />
                               Skipped / Failed
                             </h4>
+                            <p className="text-[10px] text-muted-custom/90 leading-relaxed font-light mb-3 italic bg-terracotta/[0.02] p-2 border border-terracotta/10">
+                              💡 <strong>Note:</strong> Automated crawlers can sometimes be blocked by firewalls or cloudflare protection even if the site is working. We advise verifying the source manually by clicking the link.
+                            </p>
                             <ul className="space-y-2">
                               {result.skipped_sources.map(([url, reason], i) => (
                                 <li key={i} className="flex flex-col bg-terracotta/5 p-2 border border-terracotta/10">
@@ -865,8 +1359,8 @@ export default function Home() {
                 /* Fallback empty workspace */
                 <div className="flex-1 min-h-[500px] flex flex-col items-center justify-center border border-dashed border-border-custom p-12 text-center bg-card/40">
                   <HelpCircle className="w-8 h-8 text-gold mb-4" />
-                  <h3 className="font-serif text-lg text-muted-custom/60">Awaiting Inquiry</h3>
-                  <p className="text-xs text-muted-custom/40 mt-2 max-w-xs leading-relaxed font-light">
+                  <h3 className="font-serif text-lg text-muted-custom/80">Awaiting Inquiry</h3>
+                  <p className="text-xs text-muted-custom/80 mt-2 max-w-xs leading-relaxed font-light">
                     Submit a query to trigger the research agent workspace.
                   </p>
                 </div>
@@ -918,9 +1412,9 @@ export default function Home() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h4 className="text-xs font-bold uppercase tracking-wider">{step.name}</h4>
-                          <span className="text-[8px] font-mono text-muted-custom/60 uppercase">({step.subName})</span>
+                          <span className="text-[8px] font-mono text-foreground/70 uppercase">({step.subName})</span>
                         </div>
-                        <p className="text-[11px] text-muted-custom leading-relaxed font-light mt-1">
+                        <p className="text-[11px] text-foreground/90 leading-relaxed font-normal mt-1">
                           {step.desc}
                         </p>
                       </div>
@@ -1064,9 +1558,261 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Research Library List (Landing Page) */}
+              {sessions.length > 0 && (
+                <div className="flex flex-col gap-3 w-full max-w-4xl border-t border-border-custom pt-8 mt-4">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-muted-custom/85 flex items-center justify-center gap-1.5">
+                    <BookOpen className="w-3 h-3 text-gold" />
+                    Personal Research Library ({sessions.length})
+                  </div>
+                  
+                  {loadingSessions ? (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="w-5 h-5 animate-spin text-gold" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-left">
+                      {sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          onClick={() => loadSavedSession(session)}
+                          className="group flex justify-between items-start bg-card hover:bg-gold/10 border border-border-custom p-4 transition-all duration-300 shadow-sm cursor-pointer animate-fade-in"
+                        >
+                          <div className="flex flex-col gap-2 min-w-0 flex-1 pr-4">
+                            <span className="font-serif text-sm text-foreground group-hover:text-foreground font-bold line-clamp-2">
+                              {session.query ? `"${session.query}"` : "Untitled Session"}
+                            </span>
+                            <span className="text-[10px] text-foreground/70 font-mono font-medium">
+                              Saved: {session.createdAt ? new Date(session.createdAt.seconds * 1000).toLocaleDateString() : "Just now"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSession(e, session.id!)}
+                              className="opacity-0 group-hover:opacity-100 hover:text-terracotta text-muted-custom/80 p-1.5 transition-opacity duration-300"
+                              title="Delete Report"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            <ArrowUpRight className="w-4 h-4 text-gold group-hover:text-terracotta transition-colors shrink-0" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
         </section>
+      )}
+
+      {/* Claim Inspector Drawer */}
+      {showClaimInspector && selectedClaimId && (
+        <div className="fixed inset-y-0 right-0 w-full sm:w-[480px] bg-card border-l border-border-custom shadow-2xl z-50 flex flex-col justify-between animate-fade-in font-sans">
+          
+          {/* Header */}
+          <div className="p-5 border-b border-border-subtle flex justify-between items-center bg-card/60 backdrop-blur-md">
+            <div className="flex flex-col gap-1">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-gold flex items-center gap-1">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                Claim Auditing Desk
+              </div>
+              <h3 className="font-serif text-lg font-normal text-foreground">Evidence Verification</h3>
+            </div>
+            <button
+              onClick={() => {
+                setShowClaimInspector(false);
+                setSelectedClaimId(null);
+              }}
+              className="text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Excerpt Body */}
+          <div className="flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 text-left">
+            {/* The Assertion */}
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-mono uppercase text-muted-custom">Assertion Claim</div>
+              <div className="text-sm font-serif italic text-foreground bg-gold/[0.02] border border-gold/10 p-4 leading-relaxed">
+                "{result?.claims?.[selectedClaimId]?.assertion || selectedClaimId}"
+              </div>
+            </div>
+
+            {/* Supporting Excerpt */}
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-mono uppercase text-muted-custom">Retrieved Supporting Excerpt</div>
+              {result?.claims?.[selectedClaimId]?.excerpt ? (
+                <div className="text-xs text-foreground/85 leading-relaxed font-mono bg-card border border-border-custom p-4 whitespace-pre-wrap max-h-[180px] overflow-y-auto custom-scrollbar">
+                  {result.claims[selectedClaimId].excerpt}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-custom/80 italic p-4 bg-foreground/[0.01] border border-dashed border-border-custom text-center">
+                  No explicit context excerpt recorded for this claim.
+                </div>
+              )}
+            </div>
+
+            {/* Opposing Evidence */}
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-mono uppercase text-muted-custom">Opposing / Contradicting Evidence</div>
+              {result?.claims?.[selectedClaimId]?.opposing && result.claims[selectedClaimId].opposing.toLowerCase() !== "none found" ? (
+                <div className="text-xs text-terracotta/90 leading-relaxed font-mono bg-terracotta/[0.02] border border-terracotta/10 p-4 whitespace-pre-wrap max-h-[150px] overflow-y-auto custom-scrollbar">
+                  {result.claims[selectedClaimId].opposing}
+                </div>
+              ) : (
+                <div className="text-xs text-emerald-600 font-mono bg-emerald-500/5 border border-emerald-500/10 p-3 flex items-center gap-1.5 font-bold uppercase tracking-wider text-[9px] w-fit">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  No Contradictions Ingested
+                </div>
+              )}
+            </div>
+
+            {/* Meta scores: Quality & Confidence */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5 bg-foreground/[0.01] border border-border-custom p-3.5">
+                <span className="text-[9px] font-mono uppercase text-muted-custom">Source Trust Score</span>
+                <span className={`text-xs font-bold uppercase tracking-wider ${
+                  result?.claims?.[selectedClaimId]?.quality_score?.toLowerCase()?.includes("high") ? "text-emerald-600" :
+                  result?.claims?.[selectedClaimId]?.quality_score?.toLowerCase()?.includes("low") ? "text-terracotta" : "text-gold"
+                }`}>
+                  {result?.claims?.[selectedClaimId]?.quality_score || "Medium"}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1.5 bg-foreground/[0.01] border border-border-custom p-3.5">
+                <span className="text-[9px] font-mono uppercase text-muted-custom">Consensus Confidence</span>
+                <span className={`text-xs font-bold uppercase tracking-wider ${
+                  result?.claims?.[selectedClaimId]?.confidence_rating?.toLowerCase()?.includes("high") ? "text-emerald-600" :
+                  result?.claims?.[selectedClaimId]?.confidence_rating?.toLowerCase()?.includes("low") ? "text-terracotta" : "text-gold"
+                }`}>
+                  {result?.claims?.[selectedClaimId]?.confidence_rating || "Medium"}
+                </span>
+              </div>
+            </div>
+
+            {/* Source Reference Link */}
+            {result?.claims?.[selectedClaimId]?.source_url && (
+              <div className="flex flex-col gap-2">
+                <div className="text-[10px] font-mono uppercase text-muted-custom">Source Document</div>
+                <a
+                  href={result.claims[selectedClaimId].source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono text-gold hover:text-gold-dark underline truncate bg-foreground/[0.02] p-3 border border-border-custom block"
+                >
+                  {result.claims[selectedClaimId].source_url}
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Action */}
+          <div className="p-5 border-t border-border-subtle bg-background/50 flex gap-3">
+            {result?.claims?.[selectedClaimId]?.source_url && (
+              <a
+                href={result.claims[selectedClaimId].source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center text-[10px] uppercase tracking-widest font-bold bg-foreground text-background hover:bg-gold hover:text-background py-3 transition-all duration-300"
+              >
+                Inspect Original Source
+              </a>
+            )}
+            <button
+              onClick={() => {
+                setShowClaimInspector(false);
+                setSelectedClaimId(null);
+              }}
+              className="text-[10px] uppercase tracking-widest font-bold border border-border-custom px-5 py-3 transition-all duration-300 cursor-pointer bg-transparent text-muted-custom hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Citation Inspector Drawer */}
+      {showCitationInspector && selectedCitationUrl && (
+        <div className="fixed inset-y-0 right-0 w-full sm:w-[480px] bg-card border-l border-border-custom shadow-2xl z-50 flex flex-col justify-between animate-fade-in font-sans">
+          
+          {/* Header */}
+          <div className="p-5 border-b border-border-subtle flex justify-between items-center bg-card/60 backdrop-blur-md">
+            <div className="flex flex-col gap-1">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-gold flex items-center gap-1">
+                <BookOpen className="w-3.5 h-3.5" />
+                Evidence Explorer
+              </div>
+              <h3 className="font-serif text-lg font-normal text-foreground">Verified Excerpt</h3>
+            </div>
+            <button
+              onClick={() => {
+                setShowCitationInspector(false);
+                setSelectedCitationUrl(null);
+              }}
+              className="text-muted-custom hover:text-foreground transition-colors border-0 bg-transparent cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Excerpt Body */}
+          <div className="flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-5 text-left">
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-mono uppercase text-muted-custom">Source URL</div>
+              <a
+                href={selectedCitationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-mono text-gold hover:text-gold-dark underline break-all bg-foreground/[0.02] p-3 border border-border-custom block"
+              >
+                {selectedCitationUrl}
+              </a>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-mono uppercase text-muted-custom">Retrieved Context Chunks</div>
+              {result?.source_contents?.[selectedCitationUrl] ? (
+                <div className="text-xs text-foreground/85 leading-relaxed font-mono bg-card border border-border-custom p-4 whitespace-pre-wrap max-h-[350px] overflow-y-auto custom-scrollbar">
+                  {result.source_contents[selectedCitationUrl]}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-custom/80 italic p-4 bg-foreground/[0.01] border border-dashed border-border-custom text-center">
+                  Full context excerpt not cached for this source. Please visit the URL link above to verify.
+                </div>
+              )}
+            </div>
+
+            <div className="text-[10px] text-muted-custom leading-normal border-t border-border-subtle pt-4 font-mono">
+              💡 <strong>Audit Trail:</strong> The excerpt displayed above represents the exact semantic passage downloaded and indexed by the Crawler during the investigation.
+            </div>
+          </div>
+
+          {/* Footer Action */}
+          <div className="p-5 border-t border-border-subtle bg-background/50 flex gap-3">
+            <a
+              href={selectedCitationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-center text-[10px] uppercase tracking-widest font-bold bg-foreground text-background hover:bg-gold hover:text-background py-3 transition-all duration-300"
+            >
+              Visit Source Website
+            </a>
+            <button
+              onClick={() => {
+                setShowCitationInspector(false);
+                setSelectedCitationUrl(null);
+              }}
+              className="text-[10px] uppercase tracking-widest font-bold border border-border-custom px-5 py-3 transition-all duration-300 cursor-pointer bg-transparent text-muted-custom hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Footer */}
